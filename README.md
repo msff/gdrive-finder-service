@@ -1,94 +1,161 @@
-# GDrive Finder Service
+# GDrive Finder Service + Clipboard Daemon
 
-<p align="center"><img src="gdrive-share/Assets.xcassets/AppIcon.appiconset/google-eyes.png" alt="GDrive Finder Service Logo" width="256" height="256"></p>
+<p align="center"><img src="gdrive-share/Assets.xcassets/AppIcon.appiconset/google-eyes.png" alt="GDrive Finder Service Logo" width="128" height="128"></p>
 
-GDrive Finder Service is a Finder extension for MacOS that allows you to share Google Drive links inside of your Google Workspace that open locally in your Finder.
+> Fork of [gentle-systems/gdrive-finder-service](https://github.com/gentle-systems/gdrive-finder-service) with automatic clipboard monitoring.
 
-This is super useful when your company uses Google Drive for internal file hosting. Instead of sharing browser links to files or folders you can generate links that you can share on Slack, Teams etc. which, when clicked on, will navigate to the file locally in the user's Finder.
+Share Google Drive file locations as local `gdrive://` links that open directly in Finder.
 
 ![Usage demonstration](usage.gif)
 
-![GitHub](https://img.shields.io/github/license/pch-innovations/gdrive-finder-service)
-[![GitHub release (latest by date)](https://img.shields.io/github/v/release/pch-innovations/gdrive-finder-service)](https://github.com/pch-innovations/gdrive-finder-service/releases)
-![GitHub issues](https://img.shields.io/github/issues/pch-innovations/gdrive-finder-service)
-[![GitHub followers](https://img.shields.io/github/followers/pch-innovations?label=Follow%20PCH%20Innovations&style=social)](https://github.com/pch-innovations)
-[![LinkedIn](https://img.shields.io/badge/LinkedIn-0077B5?style=for-the-badge&logo=linkedin&logoColor=white)](https://www.linkedin.com/company/pch-innovations-gmbh)
-[![Instagram](https://img.shields.io/badge/Instagram-E4405F?style=for-the-badge&logo=instagram&logoColor=white)](https://www.instagram.com/pch.innovations/)
+## Features
 
-# Getting started
-## Prerequisites
-- Using MacOS Google Drive desktop client
+| Feature | Description |
+|---------|-------------|
+| **URL Handler** | `gdrive://` links open files in Finder instead of browser |
+| **Finder Service** | Right-click → Services → Copy gdrive:// link |
+| **Clipboard Daemon** ⭐ | Auto-opens `gdrive://` links when copied (e.g., from Telegram) |
 
 ## Installation
 
-1. Download the latest [release](https://github.com/pch-innovations/gdrive-finder-service/releases) `google-drive-finder.pkg`
-2. Right click -> Open (not signed)
-3. Follow installer instructions
+```bash
+git clone https://github.com/msff/gdrive-finder-service.git
+cd gdrive-finder-service
+./install.sh
+```
+
+The installer will:
+1. Install the URL handler app (or download it if not present)
+2. Register the `gdrive://` URL scheme
+3. Add Finder context menu service
+4. Start the clipboard monitoring daemon
 
 ## Usage
 
-### Sharing a link
+### Method 1: Automatic (Clipboard) ⭐
 
-1. Navigate to a shared google drive folder or file in your Finder
-2. Right-click -> Services -> Copy GDrive link
-    - This will copy the link to your clipboard
-    - Sometimes its not under "Services" but directly in the menu
-3. Share the link with your coworkers (e.g. on Slack)
+1. Copy a `gdrive://` link (e.g., from Telegram, Slack, email)
+2. File opens automatically in Finder
+3. Notification confirms the action
 
-### Opening a link
+**This solves the problem of Telegram/Slack not recognizing `gdrive://` as clickable links!**
 
-1. Just click on a "gdrive://" link you shared or have received
-    - Tell Slack the first time to always open gdrive links with the app
-2. Your Finder will navigate to the shared file if it can access it on your computer
+### Method 2: Manual (Finder)
 
+1. Right-click a file in Google Drive folder
+2. Select **Services** → **Copy gdrive:// link**
+3. Share the link — recipient can paste in browser or copy to clipboard
+
+## Requirements
+
+- macOS 10.15+
+- [Google Drive for Desktop](https://www.google.com/drive/download/)
+
+## How It Works
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        GDrive Tools                             │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  ┌─────────────┐     ┌──────────────────┐     ┌─────────────┐  │
+│  │   Finder    │────▶│  gdrive-share    │────▶│  Clipboard  │  │
+│  │  (context   │     │  (URL handler)   │     │  (gdrive:// │  │
+│  │   menu)     │     │                  │     │   link)     │  │
+│  └─────────────┘     └──────────────────┘     └─────────────┘  │
+│                                                      │          │
+│                                                      ▼          │
+│  ┌─────────────┐     ┌──────────────────┐     ┌─────────────┐  │
+│  │   Finder    │◀────│  gdrive-share    │◀────│  Clipboard  │  │
+│  │  (file      │     │  (URL handler)   │     │   Daemon    │  │
+│  │   opens)    │     │                  │     │ (monitors)  │  │
+│  └─────────────┘     └──────────────────┘     └─────────────┘  │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+## Commands
+
+```bash
+# Check daemon status
+launchctl list | grep gdrive
+
+# Stop daemon
+launchctl stop io.skms.gdrive-clipboard-daemon
+
+# Start daemon
+launchctl start io.skms.gdrive-clipboard-daemon
+
+# View logs
+cat ~/.gdrive-daemon.log
+
+# Uninstall everything
+./uninstall.sh
+```
+
+## Files Installed
+
+| File | Location |
+|------|----------|
+| URL Handler App | `/Applications/gdrive-share.app` |
+| Clipboard Daemon | `~/.local/bin/gdrive-clipboard-daemon.sh` |
+| LaunchAgent | `~/Library/LaunchAgents/io.skms.gdrive-clipboard-daemon.plist` |
+| Log | `~/.gdrive-daemon.log` |
+
+## Privacy & Security
+
+- **Clipboard daemon only processes `gdrive://` links** — all other clipboard content is ignored and never logged
+- No data is sent anywhere — everything runs locally
+- Log contains only filenames of opened files (human-readable, not URL-encoded)
+- Log auto-rotates at 500 lines
+
+## Known Issues
+
+- Telegram/Slack don't recognize `gdrive://` as clickable links (that's why we added the clipboard daemon!)
+- Google Drive mount paths vary between systems — the URL handler accounts for common variations
+- Non-English "Shared Drives" folder names may cause issues
 
 ---
-# Development
-## What does this do
 
-At its current stage it:
+## Development
 
-- Adds the context menu item `Copy GDrive link` to your Finder
-    - This copies a modified path to your clipboard that looks like `gdrive://CloudStorage/GDrive-yourgoogleacount/yourfile`
-- Handles the app url scheme `gdrive://` to open links generated by this service
-    - The service will turn the link back to a local path, based on the domain of your google account.
-        - In order to circumvent the language sensitive top level entry "Shared Drives" it skips that part of the path
-    - It then highlights the file in a new Finder window
-
-This basically allows you to share local GDrive links with your coworkers who have access to the same shared files.
-
-## Building it from source
+### Building from source
 
 1. Build in Xcode
 2. Archive .app and put in `/Applications` folder
 
-## Testing / Debugging
+### Testing
 
-- To test just run the project from Xcode and watch the console while opening or generating links
-- If you want to refresh the Finder services context menu run
- ```sh
- /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -kill -r -domain local -domain system -domain user
- ```
+```bash
+# Refresh Finder services
+/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -kill -r -domain local -domain system -domain user
+```
 
-## Creating installer
+### Creating installer package
 
-1. In Xcode go to Product > Archive > Distribute App > Copy App
-2. Archive the app under the name `gdrive-finder-service` at `./Installer/`
-3. Run `./Installer/create_packge`
-    - This will package whatever .app bundle is at `./Installer/gdrive-finder-service/gdrive-finder-service.app`
-    - Additionally it bundles the `Installer/scripts/postinstall`
-4. Find the installer package at `Installer/output/gdrive-finder-service.pgk`
+1. In Xcode: Product > Archive > Distribute App > Copy App
+2. Archive the app under `./Installer/gdrive-finder-service/`
+3. Run `./Installer/create_package`
 
+---
 
-## Further info
+## Changelog
 
-- Everything interesting happens in `gdrive-share/AppDelegate.swift`
-- `func application(...)` is the entry point for clicking on a `gdrive://` link
-- `func handleFileService(...)` is the entry point for clicking on the `Copy GDrive link` context menu item
-    - Configured in `gdrive-share/Info.plist`
-- `func applicationDidFinishLaunching(...)` sets up an auto-terminate after 5 seconds to close the app automatically when it has been opened by the postinstall script
-    - The postinstall script opens the app once to register the service items with MacOS
-    
-## Known issues / TODOS
+### v1.2.0 (This Fork)
+- ⭐ Added clipboard daemon for automatic link opening
+- Added unified installer/uninstaller
+- Added log rotation (max 500 lines)
+- Fixed command injection vulnerability in notifications
+- Improved notifications (shows decoded filename)
 
-- [ ] google drive mount point sometimes different on a single user installation (/Volumes/GoogleDrive vs /Volumes/CloudStorage-gdrivesuer)
+### v1.0.1 (Original)
+- Initial release by gentle-systems
+
+## Credits
+
+- Original project: [gentle-systems/gdrive-finder-service](https://github.com/gentle-systems/gdrive-finder-service)
+- Clipboard daemon: SKMS Labs
+
+## License
+
+MIT License (see LICENSE file)
