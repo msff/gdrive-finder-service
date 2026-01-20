@@ -1,0 +1,143 @@
+#!/bin/bash
+# GDrive Tools Remote Installer
+# Usage: curl -fsSL https://raw.githubusercontent.com/msff/gdrive-finder-service/main/remote-install.sh | bash
+#
+# Or with explicit shell:
+# bash <(curl -fsSL https://raw.githubusercontent.com/msff/gdrive-finder-service/main/remote-install.sh)
+
+set -e
+
+REPO="msff/gdrive-finder-service"
+BRANCH="main"
+TMP_DIR=$(mktemp -d)
+LABEL="io.skms.gdrive-clipboard-daemon"
+INSTALL_DIR="$HOME/.local/bin"
+PLIST_DIR="$HOME/Library/LaunchAgents"
+PLIST_FILE="$PLIST_DIR/$LABEL.plist"
+
+cleanup() {
+    rm -rf "$TMP_DIR"
+}
+trap cleanup EXIT
+
+echo "╔══════════════════════════════════════════════════════════════╗"
+echo "║           GDrive Tools Installer                             ║"
+echo "╠══════════════════════════════════════════════════════════════╣"
+echo "║  1. URL Handler    - gdrive:// links open in Finder          ║"
+echo "║  2. Clipboard Daemon - auto-opens copied gdrive:// links     ║"
+echo "╚══════════════════════════════════════════════════════════════╝"
+echo ""
+
+# =============================================================================
+# Part 1: Install URL Handler App
+# =============================================================================
+echo "🔧 [1/2] Installing URL Handler..."
+
+# Download latest release pkg
+LATEST_URL=$(curl -s "https://api.github.com/repos/gentle-systems/gdrive-finder-service/releases/latest" | grep "browser_download_url.*pkg" | cut -d '"' -f 4)
+
+if [[ -n "$LATEST_URL" ]]; then
+    echo "   Downloading gdrive-finder-service.pkg..."
+    curl -fsSL -o "$TMP_DIR/gdrive-finder-service.pkg" "$LATEST_URL"
+
+    echo "   Installing (may require password)..."
+    sudo installer -pkg "$TMP_DIR/gdrive-finder-service.pkg" -target / 2>/dev/null || {
+        echo "   ⚠️  Auto-install failed. Opening installer manually..."
+        open "$TMP_DIR/gdrive-finder-service.pkg"
+        echo "   ⏳ Please complete the installation, then press Enter..."
+        read -r
+    }
+
+    # Register URL scheme
+    if [[ -d "/Applications/gdrive-share.app" ]]; then
+        /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "/Applications/gdrive-share.app" 2>/dev/null || true
+    fi
+
+    echo "   ✅ URL Handler installed"
+else
+    echo "   ⚠️  Could not find latest release. Skipping URL handler."
+    echo "   Install manually from: https://github.com/gentle-systems/gdrive-finder-service/releases"
+fi
+
+echo ""
+
+# =============================================================================
+# Part 2: Install Clipboard Daemon
+# =============================================================================
+echo "🔧 [2/2] Installing Clipboard Daemon..."
+
+# Create directories
+mkdir -p "$INSTALL_DIR"
+mkdir -p "$PLIST_DIR"
+
+# Stop existing daemon if running
+if launchctl list 2>/dev/null | grep -q "$LABEL"; then
+    echo "   Stopping existing daemon..."
+    launchctl stop "$LABEL" 2>/dev/null || true
+    launchctl unload "$PLIST_FILE" 2>/dev/null || true
+fi
+
+# Download daemon script
+echo "   Downloading daemon script..."
+curl -fsSL -o "$INSTALL_DIR/gdrive-clipboard-daemon.sh" \
+    "https://raw.githubusercontent.com/$REPO/$BRANCH/clipboard-daemon/gdrive-clipboard-daemon.sh"
+chmod +x "$INSTALL_DIR/gdrive-clipboard-daemon.sh"
+
+# Create LaunchAgent plist
+echo "   Creating LaunchAgent..."
+cat > "$PLIST_FILE" << EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>$LABEL</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>$INSTALL_DIR/gdrive-clipboard-daemon.sh</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardErrorPath</key>
+    <string>/tmp/gdrive-daemon.err</string>
+    <key>StandardOutPath</key>
+    <string>/tmp/gdrive-daemon.out</string>
+    <key>ProcessType</key>
+    <string>Background</string>
+    <key>LowPriorityIO</key>
+    <true/>
+</dict>
+</plist>
+EOF
+
+# Load and start daemon
+echo "   Starting daemon..."
+launchctl load "$PLIST_FILE"
+launchctl start "$LABEL"
+
+# Verify
+sleep 1
+if launchctl list 2>/dev/null | grep -q "$LABEL"; then
+    echo "   ✅ Clipboard Daemon running"
+else
+    echo "   ❌ Failed to start daemon. Check /tmp/gdrive-daemon.err"
+fi
+
+echo ""
+echo "╔══════════════════════════════════════════════════════════════╗"
+echo "║                    Installation Complete!                    ║"
+echo "╠══════════════════════════════════════════════════════════════╣"
+echo "║                                                              ║"
+echo "║  How to use:                                                 ║"
+echo "║    📋 Copy a gdrive:// link → file opens automatically       ║"
+echo "║    📁 Right-click in Finder → Services → Copy gdrive:// link ║"
+echo "║                                                              ║"
+echo "║  Commands:                                                   ║"
+echo "║    Logs:      cat ~/.gdrive-daemon.log                       ║"
+echo "║    Stop:      launchctl stop io.skms.gdrive-clipboard-daemon ║"
+echo "║    Uninstall: curl -fsSL bit.ly/gdrive-uninstall | bash      ║"
+echo "║                                                              ║"
+echo "╚══════════════════════════════════════════════════════════════╝"

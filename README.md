@@ -18,6 +18,14 @@ Share Google Drive file locations as local `gdrive://` links that open directly 
 
 ## Installation
 
+**One-liner (recommended):**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/msff/gdrive-finder-service/main/remote-install.sh | bash
+```
+
+**Or clone repo:**
+
 ```bash
 git clone https://github.com/msff/gdrive-finder-service.git
 cd gdrive-finder-service
@@ -90,7 +98,7 @@ launchctl start io.skms.gdrive-clipboard-daemon
 cat ~/.gdrive-daemon.log
 
 # Uninstall everything
-./uninstall.sh
+curl -fsSL https://raw.githubusercontent.com/msff/gdrive-finder-service/main/remote-uninstall.sh | bash
 ```
 
 ## Files Installed
