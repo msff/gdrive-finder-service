@@ -1,5 +1,5 @@
 #!/bin/bash
-# GDrive Clipboard Daemon v1.2
+# GDrive Clipboard Daemon v1.3
 # Monitors clipboard for gdrive:// links and opens them automatically
 #
 # Install: ./install.sh
@@ -36,7 +36,7 @@ notify() {
 
 # Rotate log on startup
 rotate_log
-log "Daemon started (v1.2)"
+log "Daemon started (v1.3)"
 
 while true; do
     # Get current clipboard content
@@ -51,12 +51,15 @@ while true; do
         # Open the link
         if open "$CLIP" 2>/dev/null; then
             notify "$FILENAME" "GDrive Link Opened"
+
+            # Wrap link in ``` for easy copying in Telegram/Slack
+            printf '```\n%s\n```' "$CLIP" | pbcopy
         else
             log "ERROR: Failed to open $CLIP"
             notify "Failed to open link" "GDrive Error"
         fi
 
-        # Remember to avoid re-opening
+        # Remember to avoid re-opening (store wrapped version too)
         LAST_CLIP="$CLIP"
     fi
 
