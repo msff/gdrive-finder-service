@@ -1,5 +1,5 @@
 #!/bin/bash
-# GDrive Tools Remote Installer v2.0
+# GDrive Tools Remote Installer v2.1
 # Usage: curl -fsSL https://raw.githubusercontent.com/msff/gdrive-finder-service/main/remote-install.sh | bash
 
 set -e
@@ -19,7 +19,7 @@ cleanup() {
 trap cleanup EXIT
 
 echo "╔══════════════════════════════════════════════════════════════╗"
-echo "║           GDrive Tools Installer v2.0                        ║"
+echo "║           GDrive Tools Installer v2.1                        ║"
 echo "╠══════════════════════════════════════════════════════════════╣"
 echo "║  1. URL Handler      - gdrive:// links open in Finder        ║"
 echo "║  2. Clipboard Daemon - auto-opens copied gdrive:// links     ║"
@@ -160,8 +160,10 @@ else
     echo "   ⚠️  Failed to download Quick Action"
 fi
 
-# Refresh services
-/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -kill -r -domain local -domain user 2>/dev/null || true
+# Refresh Finder to show new Quick Action
+echo "   Restarting Finder..."
+killall Finder 2>/dev/null || true
+sleep 2
 
 echo ""
 echo "╔══════════════════════════════════════════════════════════════╗"
@@ -173,9 +175,11 @@ echo "║    📤 Share: Right-click → Quick Actions →                   ║
 echo "║              Copy GDrive Link with URL                       ║"
 echo "║    📥 Open:  Copy a gdrive:// link → opens automatically     ║"
 echo "║                                                              ║"
+echo "║  Quick Action not visible? Try:                              ║"
+echo "║    killall Finder                                            ║"
+echo "║                                                              ║"
 echo "║  Commands:                                                   ║"
 echo "║    Logs:      cat ~/.gdrive-daemon.log                       ║"
 echo "║    Stop:      launchctl stop io.skms.gdrive-clipboard-daemon ║"
-echo "║    Uninstall: curl -fsSL bit.ly/gdrive-uninstall | bash      ║"
 echo "║                                                              ║"
 echo "╚══════════════════════════════════════════════════════════════╝"
