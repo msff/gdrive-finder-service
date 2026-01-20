@@ -48,24 +48,25 @@ while true; do
         FILENAME=$(basename "$CLIP" | python3 -c "import sys, urllib.parse; print(urllib.parse.unquote(sys.stdin.read().strip()))" 2>/dev/null || basename "$CLIP")
         log "Opening: $FILENAME"
 
-        # Decode URL and copy wrapped version to clipboard (all in Python to preserve UTF-8)
+        # Create shareable format: readable filename + working encoded URL
         python3 << PYTHON_EOF
 import urllib.parse
 import subprocess
+import os
 
 url = """$CLIP"""
 decoded = urllib.parse.unquote(url)
-wrapped = f'\`\`\`\n{decoded}\n\`\`\`'
+filename = os.path.basename(decoded)
+
+# Format: readable filename as comment + working encoded URL
+wrapped = f'# {filename}\n\`\`\`\n{url}\n\`\`\`'
 
 # Copy to clipboard using pbcopy
 p = subprocess.Popen(['pbcopy'], stdin=subprocess.PIPE)
 p.communicate(wrapped.encode('utf-8'))
 PYTHON_EOF
 
-        # Get decoded URL for opening
-        DECODED_URL=$(printf '%s' "$CLIP" | python3 -c "import sys, urllib.parse; print(urllib.parse.unquote(sys.stdin.read()))" 2>/dev/null || printf '%s' "$CLIP")
-
-        # Open the link (both encoded and decoded work)
+        # Open the link (use original encoded URL)
         if open "$CLIP" 2>/dev/null; then
             notify "$FILENAME" "GDrive Link Opened"
         else
