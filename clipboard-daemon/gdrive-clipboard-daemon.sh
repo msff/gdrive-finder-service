@@ -1,5 +1,5 @@
 #!/bin/bash
-# GDrive Clipboard Daemon v1.3
+# GDrive Clipboard Daemon v1.4
 # Monitors clipboard for gdrive:// links and opens them automatically
 #
 # Install: ./install.sh
@@ -36,7 +36,7 @@ notify() {
 
 # Rotate log on startup
 rotate_log
-log "Daemon started (v1.3)"
+log "Daemon started (v1.4)"
 
 while true; do
     # Get current clipboard content
@@ -48,15 +48,29 @@ while true; do
         FILENAME=$(basename "$CLIP" | python3 -c "import sys, urllib.parse; print(urllib.parse.unquote(sys.stdin.read().strip()))" 2>/dev/null || basename "$CLIP")
         log "Opening: $FILENAME"
 
-        # Open the link
+        # Decode URL and copy wrapped version to clipboard (all in Python to preserve UTF-8)
+        python3 << PYTHON_EOF
+import urllib.parse
+import subprocess
+
+url = """$CLIP"""
+decoded = urllib.parse.unquote(url)
+wrapped = f'\`\`\`\n{decoded}\n\`\`\`'
+
+# Copy to clipboard using pbcopy
+p = subprocess.Popen(['pbcopy'], stdin=subprocess.PIPE)
+p.communicate(wrapped.encode('utf-8'))
+PYTHON_EOF
+
+        # Get decoded URL for opening
+        DECODED_URL=$(printf '%s' "$CLIP" | python3 -c "import sys, urllib.parse; print(urllib.parse.unquote(sys.stdin.read()))" 2>/dev/null || printf '%s' "$CLIP")
+
+        # Open the link (both encoded and decoded work)
         if open "$CLIP" 2>/dev/null; then
             notify "$FILENAME" "GDrive Link Opened"
-
-            # Wrap link in ``` for easy copying in Telegram/Slack
-            printf '```\n%s\n```' "$CLIP" | pbcopy
         else
-            log "ERROR: Failed to open $CLIP"
-            notify "Failed to open link" "GDrive Error"
+            log "ERROR: Failed to open $DECODED_URL"
+            notify "File not found: $FILENAME" "GDrive Error"
         fi
 
         # Remember to avoid re-opening (store wrapped version too)
