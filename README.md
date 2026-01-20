@@ -13,8 +13,25 @@ Share Google Drive file locations as local `gdrive://` links that open directly 
 | Feature | Description |
 |---------|-------------|
 | **URL Handler** | `gdrive://` links open files in Finder instead of browser |
-| **Finder Service** | Right-click → Services → Copy gdrive:// link |
-| **Clipboard Daemon** ⭐ | Auto-opens `gdrive://` links when copied (e.g., from Telegram) |
+| **Quick Action** ⭐ | Right-click → Quick Actions → Copy GDrive Link with URL |
+| **Clipboard Daemon** | Auto-opens `gdrive://` links when copied (e.g., from Telegram) |
+
+### Share Format
+
+When you copy a link via Quick Action, it generates:
+
+```
+**filename.pdf**
+
+https://drive.google.com/file/d/xxx/view
+
+```
+gdrive://CloudStorage/...
+```
+```
+
+- 📱 **Google Drive URL** — works on mobile and in browser
+- 💻 **gdrive:// link** — opens directly in Finder (with daemon installed)
 
 ## Installation
 
@@ -40,19 +57,19 @@ The installer will:
 
 ## Usage
 
-### Method 1: Automatic (Clipboard) ⭐
+### 📤 Sharing a File
+
+1. Right-click a file in Google Drive folder
+2. Select **Quick Actions** → **Copy GDrive Link with URL**
+3. Paste anywhere — works in Telegram, Slack, email
+
+### 📥 Opening a Shared Link
 
 1. Copy a `gdrive://` link (e.g., from Telegram, Slack, email)
 2. File opens automatically in Finder
 3. Notification confirms the action
 
-**This solves the problem of Telegram/Slack not recognizing `gdrive://` as clickable links!**
-
-### Method 2: Manual (Finder)
-
-1. Right-click a file in Google Drive folder
-2. Select **Services** → **Copy gdrive:// link**
-3. Share the link — recipient can paste in browser or copy to clipboard
+**Solves the problem of Telegram/Slack not recognizing `gdrive://` as clickable links!**
 
 ## Requirements
 
@@ -105,8 +122,10 @@ curl -fsSL https://raw.githubusercontent.com/msff/gdrive-finder-service/main/rem
 
 | File | Location |
 |------|----------|
-| URL Handler App | `/Applications/gdrive-share.app` |
+| URL Handler App | `/Applications/gdrive-finder-service.app` |
 | Clipboard Daemon | `~/.local/bin/gdrive-clipboard-daemon.sh` |
+| Copy Link Script | `~/.local/bin/gdrive-copy-link.sh` |
+| Quick Action | `~/Library/Services/Copy GDrive Link with URL.workflow` |
 | LaunchAgent | `~/Library/LaunchAgents/io.skms.gdrive-clipboard-daemon.plist` |
 | Log | `~/.gdrive-daemon.log` |
 
@@ -149,8 +168,14 @@ curl -fsSL https://raw.githubusercontent.com/msff/gdrive-finder-service/main/rem
 
 ## Changelog
 
-### v1.2.0 (This Fork)
-- ⭐ Added clipboard daemon for automatic link opening
+### v2.0.0 (2026-01-20)
+- ⭐ **Quick Action** "Copy GDrive Link with URL" — generates shareable format with Google Drive web URL
+- Daemon v1.9: detects outgoing (from Finder) vs incoming (from messenger) links
+- Shareable format includes: bold filename, Google Drive URL (for mobile), gdrive:// link (for desktop)
+- Updated installer to install Quick Action automatically
+
+### v1.2.0
+- Added clipboard daemon for automatic link opening
 - Added unified installer/uninstaller
 - Added log rotation (max 500 lines)
 - Fixed command injection vulnerability in notifications
