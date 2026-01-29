@@ -95,6 +95,13 @@ print(decoded.replace('gdrive://', f'{home}/Library/'))
             fi
         fi  # end of IS_WRAPPED check
 
+        # Determine if folder or file for Google URL generation
+        if [[ -d "$LOCAL_PATH" ]]; then
+            export IS_FOLDER="true"
+        else
+            export IS_FOLDER="false"
+        fi
+
         if [[ "$IS_OUTGOING" == "outgoing" ]]; then
             # OUTGOING: Create shareable format
             # Pass FILE_ID via environment (may be empty due to sandbox)
@@ -112,7 +119,12 @@ file_id = os.environ.get("FILE_ID", "")
 
 # Format: filename + optional Google URL + gdrive:// (for desktop with daemon)
 if file_id:
-    gdrive_url = f"https://drive.google.com/file/d/{file_id}/view"
+    # Check if folder or file
+    is_folder = os.environ.get("IS_FOLDER", "false") == "true"
+    if is_folder:
+        gdrive_url = f"https://drive.google.com/drive/folders/{file_id}"
+    else:
+        gdrive_url = f"https://drive.google.com/file/d/{file_id}/view"
     wrapped = f"# {filename}\n📱 {gdrive_url}\n```\n{url}\n```"
 else:
     # No file_id available (sandbox limitation) - skip Google URL

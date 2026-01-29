@@ -24,7 +24,13 @@ for f in "$@"; do
 
     # Create wrapped format
     if [[ -n "$FILE_ID" ]]; then
-        GOOGLE_URL="https://drive.google.com/file/d/$FILE_ID/view"
+        # Determine if folder or file
+        if [[ -d "$f" ]]; then
+            GOOGLE_URL="https://drive.google.com/drive/folders/$FILE_ID"
+        else
+            GOOGLE_URL="https://drive.google.com/file/d/$FILE_ID/view"
+        fi
+
         WRAPPED="**$FILENAME**
 
 $GOOGLE_URL
