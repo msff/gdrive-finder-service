@@ -13,7 +13,7 @@ for f in "$@"; do
 
     # Create gdrive:// URL
     RELATIVE_PATH="${f#*/Library/}"
-    ENCODED=$(python3 -c "import urllib.parse; print(urllib.parse.quote('$RELATIVE_PATH', safe='/'))")
+    ENCODED=$(printf '%s' "$RELATIVE_PATH" | python3 -c "import sys, urllib.parse; print(urllib.parse.quote(sys.stdin.read(), safe='/'))")
     GDRIVE_URL="gdrive://$ENCODED"
 
     # Get filename (decoded)
