@@ -1,0 +1,234 @@
+﻿# gdrive-copy-link.ps1
+# Copy GDrive link for sharing — Windows version
+# Called from Explorer context menu
+#
+# Usage: powershell -ExecutionPolicy Bypass -File gdrive-copy-link.ps1 "G:\Shared drives\SKMS Main\file.txt"
+
+param(
+    [Parameter(Mandatory=$true, Position=0)]
+    [string]$FilePath
+)
+
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$OutputEncoding = [System.Text.Encoding]::UTF8
+
+# --- Helper: Find Google Drive root ---
+# Google Drive on Windows can be:
+#   1. Virtual drive letter (e.g. G:\)
+#   2. Under user profile (e.g. %USERPROFILE%\Google Drive\)
+# We detect by checking if the path is on a Google Drive mount
+
+function Find-GDriveInfo {
+    param([string]$Path)
+
+    # Normalize path
+    $Path = [System.IO.Path]::GetFullPath($Path)
+
+    # Pattern 1: Virtual drive (G:\Shared drives\..., G:\My Drive\...)
+    # Google Drive virtual drives have "Shared drives" or "My Drive" at top level
+    $driveLetter = $Path.Substring(0, 3)  # e.g. "G:\"
+
+    # Check common Google Drive indicators
+    $isGDrive = $false
+    $gdriveRoot = ""
+    $email = ""
+
+    # Try to detect Google Drive via registry
+    $drivefsKey = "HKCU:\Software\Google\DriveFS"
+    if (Test-Path $drivefsKey) {
+        try {
+            $mountPoint = (Get-ItemProperty $drivefsKey -ErrorAction SilentlyContinue).MountPoint
+            if ($mountPoint -and $Path.StartsWith($mountPoint, [System.StringComparison]::OrdinalIgnoreCase)) {
+                $isGDrive = $true
+                $gdriveRoot = $mountPoint
+            }
+        } catch {}
+    }
+
+    # Try to find via known drive letters (scan A-Z for Google Drive markers)
+    if (-not $isGDrive) {
+        if ((Test-Path "$driveLetter`Shared drives") -or (Test-Path "$driveLetter`My Drive")) {
+            $isGDrive = $true
+            $gdriveRoot = $driveLetter
+        }
+    }
+
+    # Pattern 2: User profile path
+    if (-not $isGDrive) {
+        $userProfile = $env:USERPROFILE
+        $possiblePaths = @(
+            "$userProfile\Google Drive",
+            "$userProfile\Google Drive Stream"
+        )
+        foreach ($pp in $possiblePaths) {
+            if ($Path.StartsWith($pp, [System.StringComparison]::OrdinalIgnoreCase)) {
+                $isGDrive = $true
+                $gdriveRoot = $pp
+                break
+            }
+        }
+    }
+
+    # Try to get email from Google Drive config
+    $drivefsConfigDir = "$env:LOCALAPPDATA\Google\DriveFS"
+    if (Test-Path $drivefsConfigDir) {
+        # Look for account directories (they are named by hash, but contain account info)
+        $accountFiles = Get-ChildItem -Path $drivefsConfigDir -Filter "account_db*" -Recurse -ErrorAction SilentlyContinue
+        if (-not $accountFiles) {
+            # Try reading from profiles
+            $profileDirs = Get-ChildItem -Path $drivefsConfigDir -Directory -ErrorAction SilentlyContinue |
+                Where-Object { $_.Name -match '^\d+$' }
+            foreach ($pd in $profileDirs) {
+                $accountFile = Join-Path $pd.FullName "account_db"
+                if (Test-Path $accountFile) {
+                    # Simple heuristic: read file and look for email pattern
+                    try {
+                        $content = [System.IO.File]::ReadAllText($accountFile)
+                        if ($content -match '[\w.-]+@[\w.-]+\.\w+') {
+                            $email = $Matches[0]
+                            break
+                        }
+                    } catch {}
+                }
+            }
+        }
+    }
+
+    # Fallback: try to get email from environment or whoami
+    if (-not $email) {
+        # Check if path contains email hint
+        if ($Path -match 'GoogleDrive-([^/\\]+)') {
+            $email = $Matches[1] -replace '%40', '@'
+        }
+    }
+
+    return @{
+        IsGDrive  = $isGDrive
+        Root      = $gdriveRoot.TrimEnd('\')
+        Email     = $email
+    }
+}
+
+# --- Main ---
+
+$info = Find-GDriveInfo -Path $FilePath
+
+if (-not $info.IsGDrive) {
+    # Not a Google Drive file — show notification and exit
+    $balloon = New-Object System.Windows.Forms.NotifyIcon
+    Write-Host "ERROR: Not a Google Drive path: $FilePath"
+    exit 1
+}
+
+$Filename = [System.IO.Path]::GetFileName($FilePath)
+$IsFolder = (Test-Path $FilePath -PathType Container)
+
+# --- Build gdrive:// URL ---
+# Format: gdrive://CloudStorage/GoogleDrive-user%40domain/Общие диски/SKMS Main/path
+# We need to construct a URL that Mac daemon can also resolve
+
+$relativePath = $FilePath.Substring($info.Root.Length).TrimStart('\')
+
+# Determine the gdrive:// path prefix
+$emailEncoded = ""
+if ($info.Email) {
+    $emailEncoded = $info.Email -replace '@', '%40'
+}
+
+# Detect shared vs personal drive
+$gdriveUrlPath = ""
+if ($relativePath -match '^Shared drives\\(.*)') {
+    # Shared drive — map to Mac's "Общие диски" equivalent
+    $innerPath = $Matches[1] -replace '\\', '/'
+    if ($emailEncoded) {
+        $gdriveUrlPath = "gdrive://CloudStorage/GoogleDrive-$emailEncoded/Shared drives/$innerPath"
+    } else {
+        $gdriveUrlPath = "gdrive://Shared drives/$innerPath"
+    }
+} elseif ($relativePath -match '^My Drive\\(.*)') {
+    $innerPath = $Matches[1] -replace '\\', '/'
+    if ($emailEncoded) {
+        $gdriveUrlPath = "gdrive://CloudStorage/GoogleDrive-$emailEncoded/My Drive/$innerPath"
+    } else {
+        $gdriveUrlPath = "gdrive://My Drive/$innerPath"
+    }
+} else {
+    # Generic fallback
+    $innerPath = $relativePath -replace '\\', '/'
+    if ($emailEncoded) {
+        $gdriveUrlPath = "gdrive://CloudStorage/GoogleDrive-$emailEncoded/$innerPath"
+    } else {
+        $gdriveUrlPath = "gdrive://$innerPath"
+    }
+}
+
+# --- Extract display path ---
+if ($relativePath -match '^Shared drives\\(.*)') {
+    $DisplayPath = "/" + ($Matches[1] -replace '\\', '/')
+} elseif ($relativePath -match '^My Drive\\(.*)') {
+    $DisplayPath = "/" + ($Matches[1] -replace '\\', '/')
+} else {
+    $DisplayPath = "/" + $Filename
+}
+
+# --- Try to get Google Drive file ID ---
+# On Windows, Google Drive file IDs are not easily accessible from filesystem
+# We try fsutil and alternate data streams
+$FileId = ""
+try {
+    # Google Drive for Desktop may store metadata in alternate data streams
+    $adsPath = "${FilePath}:com.google.drivefs.item-id"
+    if (Test-Path -LiteralPath $adsPath -ErrorAction SilentlyContinue) {
+        $FileId = Get-Content -LiteralPath $adsPath -ErrorAction SilentlyContinue
+    }
+} catch {}
+
+# Alternative: try reading from .drive metadata
+if (-not $FileId) {
+    try {
+        # Check for desktop.ini with Google Drive metadata
+        $parentDir = [System.IO.Path]::GetDirectoryName($FilePath)
+        $desktopIni = Join-Path $parentDir "desktop.ini"
+        if (Test-Path $desktopIni) {
+            $iniContent = Get-Content $desktopIni -ErrorAction SilentlyContinue
+            # Look for Google Drive identifiers — this is speculative
+        }
+    } catch {}
+}
+
+# --- Build clipboard content ---
+$lines = @()
+$lines += "**$Filename**"
+$lines += ""
+
+if ($FileId) {
+    if ($IsFolder) {
+        $GoogleUrl = "https://drive.google.com/drive/folders/$FileId"
+    } else {
+        $GoogleUrl = "https://drive.google.com/file/d/$FileId/view"
+    }
+    $lines += $GoogleUrl
+    $lines += ""
+}
+
+$lines += "``'$DisplayPath'``"
+$lines += ""
+$lines += '```'
+$lines += $gdriveUrlPath
+$lines += '```'
+
+$wrapped = $lines -join "`n"
+
+# --- Copy to clipboard ---
+Set-Clipboard -Value $wrapped
+
+# --- Show notification (Windows toast) ---
+Add-Type -AssemblyName System.Windows.Forms
+$notifyIcon = New-Object System.Windows.Forms.NotifyIcon
+$notifyIcon.Icon = [System.Drawing.SystemIcons]::Information
+$notifyIcon.BalloonTipTitle = $Filename
+$notifyIcon.BalloonTipText = "GDrive link copied to clipboard"
+$notifyIcon.Visible = $true
+$notifyIcon.ShowBalloonTip(3000)
+Start-Sleep -Seconds 3
+$notifyIcon.Dispose()

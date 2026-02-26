@@ -13,11 +13,20 @@ for f in "$@"; do
 
     # Create gdrive:// URL
     RELATIVE_PATH="${f#*/Library/}"
-    ENCODED=$(printf '%s' "$RELATIVE_PATH" | python3 -c "import sys, urllib.parse; print(urllib.parse.quote(sys.stdin.read(), safe='/'))")
+    ENCODED="${RELATIVE_PATH//@/%40}"
     GDRIVE_URL="gdrive://$ENCODED"
 
-    # Get filename (decoded)
+    # Get filename
     FILENAME=$(basename "$f")
+
+    # Extract display path (e.g. /SKMS Main/Биздев/research/...)
+    if [[ "$f" == *"/Общие диски/"* ]]; then
+        DISPLAY_PATH="/${f#*Общие диски/}"
+    elif [[ "$f" == *"/My Drive/"* ]]; then
+        DISPLAY_PATH="/${f#*My Drive/}"
+    else
+        DISPLAY_PATH="/$FILENAME"
+    fi
 
     # Get Google Drive file ID via xattr
     FILE_ID=$(xattr -p "com.google.drivefs.item-id#S" "$f" 2>/dev/null)
@@ -35,11 +44,15 @@ for f in "$@"; do
 
 $GOOGLE_URL
 
+\`'$DISPLAY_PATH'\`
+
 \`\`\`
 $GDRIVE_URL
 \`\`\`"
     else
         WRAPPED="**$FILENAME**
+
+\`'$DISPLAY_PATH'\`
 
 \`\`\`
 $GDRIVE_URL

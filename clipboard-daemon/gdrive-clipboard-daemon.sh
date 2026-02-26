@@ -1,9 +1,12 @@
 #!/bin/bash
-# GDrive Clipboard Daemon v1.9
+# GDrive Clipboard Daemon v2.0
 # Monitors clipboard for gdrive:// links and opens them automatically
 #
 # Install: ./install.sh
 # Uninstall: ./uninstall.sh
+
+export LANG=en_US.UTF-8
+export LC_ALL=en_US.UTF-8
 
 LOG_FILE="$HOME/.gdrive-daemon.log"
 MAX_LOG_LINES=500
@@ -36,14 +39,14 @@ notify() {
 
 # Rotate log on startup
 rotate_log
-log "Daemon started (v1.9)"
+log "Daemon started (v2.0)"
 
 while true; do
     # Get current clipboard content
     CLIP=$(pbpaste 2>/dev/null)
 
     # Check if it's a gdrive:// link (raw or wrapped)
-    # Handle both raw "gdrive://..." and wrapped "# filename\n...\ngdrive://..."
+    # Handle both raw "gdrive://..." and wrapped "**filename**\n...\ngdrive://..." or "# filename\n...\ngdrive://..."
 
     RAW_URL=""
     IS_WRAPPED=false
@@ -62,17 +65,8 @@ while true; do
         FILENAME=$(basename "$RAW_URL" | python3 -c "import sys, urllib.parse; print(urllib.parse.unquote(sys.stdin.read().strip()))" 2>/dev/null || basename "$RAW_URL")
         log "Opening: $FILENAME (wrapped=$IS_WRAPPED)"
 
-        # If already wrapped, treat as incoming (just open, don't re-wrap)
-        if [[ "$IS_WRAPPED" == true ]]; then
-            IS_OUTGOING="incoming"
-            log "  Already wrapped, treating as incoming"
-        else
-            # Check if this is outgoing (from Finder) or incoming (from messenger)
-            # If Finder is frontmost AND file exists → outgoing → wrap for sharing
-            # Otherwise → incoming → just open, don't modify clipboard
-
-            # Decode URL and build local path
-            LOCAL_PATH=$(printf '%s' "$RAW_URL" | python3 -c "
+        # Build local path from gdrive:// URL (handles both encoded and readable formats)
+        LOCAL_PATH=$(printf '%s' "$RAW_URL" | python3 -c "
 import sys, urllib.parse, os
 url = sys.stdin.read()
 decoded = urllib.parse.unquote(url)
@@ -80,10 +74,19 @@ home = os.path.expanduser('~')
 print(decoded.replace('gdrive://', f'{home}/Library/'))
 ")
 
+        # If already wrapped, treat as incoming (just open, don't re-wrap)
+        if [[ "$IS_WRAPPED" == true ]]; then
+            IS_OUTGOING="incoming"
+            log "  Already wrapped, treating as incoming"
+        else
+            # Check if this is outgoing (from Finder) or incoming (from messenger)
+            # If Finder is frontmost AND path exists → outgoing → wrap for sharing
+            # Otherwise → incoming → just open, don't modify clipboard
+
             # Check frontmost app (using AppleScript to avoid sandbox issues)
             FRONTMOST=$(osascript -e 'tell application "System Events" to get name of first process whose frontmost is true' 2>/dev/null)
 
-            if [[ "$FRONTMOST" == "Finder" ]] && [[ -f "$LOCAL_PATH" ]]; then
+            if [[ "$FRONTMOST" == "Finder" ]] && [[ -e "$LOCAL_PATH" ]]; then
                 # Outgoing from Finder - wrap for sharing
                 # Note: xattr is blocked by LaunchAgent sandbox, so we skip Google URL
                 IS_OUTGOING="outgoing"
@@ -140,11 +143,17 @@ p.communicate(wrapped.encode("utf-8"))
             log "Incoming: opening file"
         fi
 
-        # Open the link (use RAW_URL, not CLIP which may be wrapped)
-        if open "$RAW_URL" 2>/dev/null; then
+        # Open by local path (avoids URL scheme which mangles UTF-8)
+        if [[ -d "$LOCAL_PATH" ]]; then
+            # Folder → open in Finder
+            open "$LOCAL_PATH" 2>/dev/null
+            notify "$FILENAME" "GDrive Link Opened"
+        elif [[ -f "$LOCAL_PATH" ]]; then
+            # File → reveal in Finder (not open with app)
+            open -R "$LOCAL_PATH" 2>/dev/null
             notify "$FILENAME" "GDrive Link Opened"
         else
-            log "ERROR: Failed to open $RAW_URL"
+            log "ERROR: Path not found: $LOCAL_PATH"
             notify "File not found: $FILENAME" "GDrive Error"
         fi
 
