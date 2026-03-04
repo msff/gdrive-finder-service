@@ -11,13 +11,37 @@ for f in "$@"; do
         continue
     fi
 
-    # Create gdrive:// URL
+    # Create gdrive:// URL with selective encoding
+    # Encodes @#?&% and spaces, keeps Cyrillic readable
     RELATIVE_PATH="${f#*/Library/}"
-    ENCODED=$(printf '%s' "$RELATIVE_PATH" | python3 -c "import sys, urllib.parse; print(urllib.parse.quote(sys.stdin.read(), safe='/'))")
+    ENCODED=$(printf '%s' "$RELATIVE_PATH" | python3 -c "
+import sys, urllib.parse
+text = sys.stdin.read().strip()
+result = []
+for ch in text:
+    if ch == '/':
+        result.append(ch)
+    elif ord(ch) > 127:
+        result.append(ch)  # Cyrillic etc — keep readable
+    elif ch.isalnum() or ch in '-_.~':
+        result.append(ch)
+    else:
+        result.append(urllib.parse.quote(ch))
+print(''.join(result), end='')
+")
     GDRIVE_URL="gdrive://$ENCODED"
 
-    # Get filename (decoded)
+    # Get filename
     FILENAME=$(basename "$f")
+
+    # Extract display path (e.g. /SKMS Main/Биздев/research/...)
+    if [[ "$f" == *"/Общие диски/"* ]]; then
+        DISPLAY_PATH="/${f#*Общие диски/}"
+    elif [[ "$f" == *"/My Drive/"* ]]; then
+        DISPLAY_PATH="/${f#*My Drive/}"
+    else
+        DISPLAY_PATH="/$FILENAME"
+    fi
 
     # Get Google Drive file ID via xattr
     FILE_ID=$(xattr -p "com.google.drivefs.item-id#S" "$f" 2>/dev/null)
@@ -35,11 +59,15 @@ for f in "$@"; do
 
 $GOOGLE_URL
 
+\`'$DISPLAY_PATH'\`
+
 \`\`\`
 $GDRIVE_URL
 \`\`\`"
     else
         WRAPPED="**$FILENAME**
+
+\`'$DISPLAY_PATH'\`
 
 \`\`\`
 $GDRIVE_URL
@@ -49,6 +77,8 @@ $GDRIVE_URL
     # Copy to clipboard
     printf '%s' "$WRAPPED" | pbcopy
 
-    # Notify
-    osascript -e "display notification \"Link copied with Google URL\" with title \"$FILENAME\""
+    # Notify (escape to prevent AppleScript injection)
+    SAFE_FILENAME="${FILENAME//\\/\\\\}"
+    SAFE_FILENAME="${SAFE_FILENAME//\"/\\\"}"
+    osascript -e "display notification \"Link copied with Google URL\" with title \"$SAFE_FILENAME\""
 done
