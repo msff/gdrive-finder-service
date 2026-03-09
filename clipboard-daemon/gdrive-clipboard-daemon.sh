@@ -77,6 +77,19 @@ print(filename + '\t' + local_path, end='')
 
         log "Opening: $FILENAME (wrapped=$IS_WRAPPED)"
 
+        # Email remap: shared drives are accessible via any account's mount,
+        # so remap to the local user's GoogleDrive-* folder (skip _backup_ dirs)
+        if [[ ! -e "$LOCAL_PATH" ]]; then
+            LOCAL_GDRIVE=$(ls -d "$HOME/Library/CloudStorage/GoogleDrive-"* 2>/dev/null | grep -v _backup | head -1)
+            if [[ -n "$LOCAL_GDRIVE" ]]; then
+                REMAPPED=$(echo "$LOCAL_PATH" | sed -E "s|$HOME/Library/CloudStorage/GoogleDrive-[^/]+|$LOCAL_GDRIVE|")
+                if [[ "$REMAPPED" != "$LOCAL_PATH" ]]; then
+                    log "  Remap: $(basename "${LOCAL_PATH%%/Shared*}") → $(basename "$LOCAL_GDRIVE")"
+                    LOCAL_PATH="$REMAPPED"
+                fi
+            fi
+        fi
+
         # Locale swap: try alternative folder names if path not found
         if [[ ! -e "$LOCAL_PATH" ]]; then
             for FROM_TO in "Shared drives:Общие диски" "Общие диски:Shared drives" "My Drive:Мой диск" "Мой диск:My Drive"; do

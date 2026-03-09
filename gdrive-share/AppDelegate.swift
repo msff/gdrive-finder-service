@@ -110,14 +110,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             return nil
         }
 
-        for url in contents {
-            print(url, domain)
-            if url.lastPathComponent.contains(domain) {
-                return url
-            }
+        // Filter to GoogleDrive- folders matching the domain, skip backups/non-directories
+        let matches = contents.filter { url in
+            let name = url.lastPathComponent
+            return name.contains(domain) && name.hasPrefix("GoogleDrive-")
         }
 
-        return nil
+        // Prefer active mount (no _backup_ prefix) over backups
+        return matches.first { !$0.lastPathComponent.hasPrefix("_backup_") } ?? matches.first
     }
     
     func gdriveURLToLocalFilePath(_ gdriveURL: URL) -> URL? {
