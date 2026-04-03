@@ -35,10 +35,15 @@ print(''.join(result), end='')
     FILENAME=$(basename "$f")
 
     # Extract display path (e.g. /SKMS Main/Биздев/research/...)
+    # Folder names depend on macOS locale (RU: "Общие диски", EN: "Shared drives")
     if [[ "$f" == *"/Общие диски/"* ]]; then
         DISPLAY_PATH="/${f#*Общие диски/}"
+    elif [[ "$f" == *"/Shared drives/"* ]]; then
+        DISPLAY_PATH="/${f#*Shared drives/}"
     elif [[ "$f" == *"/My Drive/"* ]]; then
         DISPLAY_PATH="/${f#*My Drive/}"
+    elif [[ "$f" == *"/Мой диск/"* ]]; then
+        DISPLAY_PATH="/${f#*Мой диск/}"
     else
         DISPLAY_PATH="/$FILENAME"
     fi
